@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/learning.dir/hw1.cpp.o -o learning  /usr/lib/x86_64-linux-gnu/libmpfr.so /usr/lib/x86_64-linux-gnu/libgmp.so 

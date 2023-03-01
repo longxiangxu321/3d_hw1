@@ -1902,6 +1902,7 @@ CMakeFiles/learning.dir/hw1.cpp.o: /mnt/d/Q3/modelling/hw1/hw1.cpp \
  /usr/include/boost/iterator/counting_iterator.hpp \
  /usr/include/boost/detail/numeric_traits.hpp \
  /usr/include/CGAL/Triangulation_face_base_with_info_2.h \
+ /usr/include/CGAL/Triangulation_vertex_base_with_info_2.h \
  /usr/include/CGAL/linear_least_squares_fitting_3.h \
  /usr/include/CGAL/license/Principal_component_analysis.h \
  /usr/include/CGAL/linear_least_squares_fitting_points_3.h \

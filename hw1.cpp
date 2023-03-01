@@ -8,43 +8,77 @@
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 #include <CGAL/Triangulation_vertex_base_2.h>
 #include <CGAL/Triangulation_face_base_with_info_2.h>
+#include <CGAL/Triangulation_vertex_base_with_info_2.h>
 #include <CGAL/linear_least_squares_fitting_3.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
 typedef CGAL::Exact_predicates_tag Tag;
-typedef CGAL::Simple_cartesian<double>  K;
-typedef K::Plane_3                  Plane;
+typedef Kernel::Point_3 Point;
+typedef Kernel::Point_2 Point_2;
+typedef Kernel::Plane_3 Plane;
+
 struct FaceInfo {
   bool interior;
+  bool processed;
   FaceInfo() {
     interior = false;
   }
 };
-typedef CGAL::Triangulation_vertex_base_2<Kernel> VertexBase;
+
+typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned, Kernel> VertexBase;
 typedef CGAL::Constrained_triangulation_face_base_2<Kernel> FaceBase;
 typedef CGAL::Triangulation_face_base_with_info_2<FaceInfo, Kernel, FaceBase> FaceBaseWithInfo;
 typedef CGAL::Triangulation_data_structure_2<VertexBase, FaceBaseWithInfo> TriangulationDataStructure;
 typedef CGAL::Constrained_Delaunay_triangulation_2<Kernel, TriangulationDataStructure, Tag> Triangulation;
+typedef Triangulation::Face_handle Face_handle;
 
 const std::string input_file = "../station.hw1";
 const std::string output_file = "../station.obj";
 
-struct Vertex {
-  int id;
-  double x, y, z;
-};
+//struct Vertex {
+//  int id;
+//  double x, y, z;
+//};
 
 struct Face {
   int id;
   std::list<int> outer_ring;
   std::list<std::list<int>> inner_rings;
-  Kernel::Plane_3 best_plane;
+  Plane best_plane;
   Triangulation triangulation;
 };
 
+
+
+
+void label_triangles(Triangulation &triangulation) {
+    std::list<Triangulation::Face_handle> to_check;
+    triangulation.infinite_face()->info().processed = true;
+    to_check.push_back(triangulation.infinite_face());
+    while (!to_check.empty()) {
+//        CGAL_assertion(to_check.front()->info().processed == true);
+        for (int neighbour = 0; neighbour < 3; ++neighbour) {
+            if (to_check.front()->neighbor(neighbour)->info().processed) {
+            } else {
+                to_check.front()->neighbor(neighbour)->info().processed = true;
+//                CGAL_assertion(to_check.front()->neighbor(neighbour)->info().processed == true);
+                if (triangulation.is_constrained(Triangulation::Edge(to_check.front(), neighbour))) {
+                    to_check.front()->neighbor(neighbour)->info().interior = !to_check.front()->info().interior;
+                    to_check.push_back(to_check.front()->neighbor(neighbour));
+                } else {
+                    to_check.front()->neighbor(neighbour)->info().interior = to_check.front()->info().interior;
+                    to_check.push_back(to_check.front()->neighbor(neighbour));
+                }
+            }
+        } to_check.pop_front();
+    }
+}
+
+
+
 int main(int argc, const char * argv[]) {
   
-  std::map<int, Vertex> vertices;
+  std::map<int, Point> vertices;
   std::map<int, Face> faces;
   
   // Read file
@@ -69,9 +103,7 @@ int main(int argc, const char * argv[]) {
       double x, y, z;
       line_stream >> id >> x >> y >> z;
       std::cout << "Vertex " << id << ": (" << x << ", " << y << ", " << z << ")" << std::endl;
-      vertices[id].x = x;
-      vertices[id].y = y;
-      vertices[id].z = z;
+      vertices[id] = Point(x, y, z);
     }
 
     // Read faces
@@ -121,36 +153,84 @@ int main(int argc, const char * argv[]) {
             std::cout << std::endl;
         }
 
-        std::cout << std::endl;
 
-
-//        std::list<int> outer_ring;
-//        std::list<std::list<int>> inner_rings;
     }
 
     //
-
 
 
     // TO DO
   }
 
   // fitting plane
-    for (auto const &face: faces) {
-        std::cout << "Face " << face.first << ": " << std::endl;
-        std::cout << "\touter:";
-        for (auto const &vertex: face.second.outer_ring) std::cout << " " << vertex;
-        std::cout << std::endl;
-        for (auto const &ring: face.second.inner_rings) {
-            std::cout << "\tinner:";
-            for (auto const &vertex: ring) std::cout << " " << vertex;
-            std::cout << std::endl;
+  for (auto &face: faces) {
+    std::vector<Point> pts;
+    for (auto const &vertex: face.second.outer_ring) pts.push_back(vertices[vertex]);
+    Plane plane;
+    linear_least_squares_fitting_3(pts.begin(),pts.end(), face.second.best_plane,CGAL::Dimension_tag<0>());
+    std::cout << face.second.best_plane << std::endl;
+  }
+
+  //constrained delaunay triangulation
+
+  // creating constraints
+  for (auto &face: faces) {
+    std::vector<std::pair<int, int>> segments;
+    // obtaining vertices
+    std::list<int> vertice_ids;
+
+    auto it = face.second.outer_ring.begin();
+    for (int i=0; i<face.second.outer_ring.size(); i++) {
+        vertice_ids.push_back(*it);
+        int first = *it;
+        it ++;
+        if (it == face.second.outer_ring.end()) it = face.second.outer_ring.begin();
+        int second = *it;
+        segments.push_back(std::make_pair(first, second));
+    }
+
+    for (auto const &ring: face.second.inner_rings) {
+        auto it = ring.begin();
+        for (int i=0; i<ring.size(); i++) {
+            vertice_ids.push_back(*it);
+            int first = *it;
+            it ++;
+            if (it == ring.end()) it = ring.begin();
+            int second = *it;
+            segments.push_back(std::make_pair(first, second));
+
         }
     }
 
-//  for (auto const &face: faces)
-//  linear_least_squares_fitting_3(triangles.begin(),triangles.end(),plane,CGAL::Dimension_tag<2>());
+    Triangulation cdt;
+    std::vector< std::pair<Point_2, int> > subset;
+    for (auto id : vertice_ids) {
+        Point_2 vertex_to_insert = face.second.best_plane.to_2d(vertices[id]);
+        auto to_insert = std::make_pair(vertex_to_insert, id);
+        subset.push_back(to_insert);
+    }
+    cdt.insert(subset.begin(), subset.end());
 
-  std::cout << "debug" << std::endl;
+
+    for (const auto& s : segments) {
+      Point_2 s_1 = face.second.best_plane.to_2d(vertices[s.first]);
+      Point_2 s_2 = face.second.best_plane.to_2d(vertices[s.second]);
+      cdt.insert_constraint(s_1, s_2);
+    }
+
+    face.second.triangulation = cdt;
+
+    label_triangles(face.second.triangulation);
+
+    std::ifstream output_stream;
+    output_stream.open(output_file);
+//    for (auto vit = face.second.triangulation.finite_vertices_begin();
+//    vit != face.second.triangulation.finite_vertices_end(); ++vit) {
+//        auto temp_pt = face.second.best_plane.to_3d(vit->point());
+//        auto temp_pt_pair = std::make_pair(temp_pt, vit->info());
+//    }
+  }
+
+
   return 0;
 }

@@ -10,6 +10,10 @@ The homework is about **triangulating the faces of a polyhedron**. The steps tak
 
 
 
+# Author
+
+Longxiang Xu 5722918
+
 # How to run?
 
 ## Requirements

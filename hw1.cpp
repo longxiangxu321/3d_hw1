@@ -31,8 +31,8 @@ typedef CGAL::Triangulation_data_structure_2<VertexBase, FaceBaseWithInfo> Trian
 typedef CGAL::Constrained_Delaunay_triangulation_2<Kernel, TriangulationDataStructure, Tag> Triangulation;
 typedef Triangulation::Face_handle Face_handle;
 
-const std::string input_file = "../station.hw1";
-const std::string output_file = "../t1.obj";
+const std::string input_file = "../stilted_house.hw1";
+const std::string output_file = "../stilted_house.obj";
 
 //struct Vertex {
 //  int id;
@@ -65,12 +65,8 @@ mark_domains(Triangulation & ct,
         }
     }
 }
-//explore set of facets connected with non constrained edges,
-//and attribute to each such set a nesting level.
-//We start from facets incident to the infinite vertex, with a nesting
-//level of 0. Then we recursively consider the non-explored facets incident
-//to constrained edges bounding the former set and increase the nesting level by 1.
-//Facets in the domain are those with an odd nesting level.
+
+
 void
 mark_domains(Triangulation& cdt)
 {
@@ -95,65 +91,88 @@ struct Face {
     std::list<std::list<int>> inner_rings;
     Plane best_plane;
     Triangulation triangulation;
+    std::vector< std::pair<Point_2,int>> points_2d;
+    std::vector<Point_2> outer_points;
+    std::vector<std::vector<Point_2>> inner_points;
+    int count;
+    Face(int id, std::list<int> outer_ring, std::list<std::list<int>> inner_rings) :
+    id(id), outer_ring(outer_ring), inner_rings(inner_rings), best_plane(), triangulation(), points_2d() {}
+
 
     void fitting_plane(std::map<int, Point> vertices) {
         std::vector<Point> pts;
         for (auto const &vertex: outer_ring) pts.push_back(vertices[vertex]);
-        Plane plane;
+        for (const auto& inner: inner_rings) {
+            for (auto const &vi :inner) pts.push_back(vertices[vi]);
+        }
         linear_least_squares_fitting_3(pts.begin(), pts.end(), best_plane, CGAL::Dimension_tag<0>());
-        std::cout << best_plane << std::endl;
+//        std::cout << best_plane << std::endl;
     }
 
     void cdt(std::map<int, Point> vertices) {
         std::vector<std::pair<int, int>> segments;
         // obtaining vertices
-        std::list<int> vertice_ids;
-        std::list<Triangulation::Vertex_handle> v_handles;
-
-        Triangulation cdt;
-
-//        std::list<Triangulation::Vertex_handle> outer_segments;
-//        std::list<Triangulation::Vertex_handle> inner_segments;
-
-        for (auto it = outer_ring.begin(); it != outer_ring.end(); ++it) {
-            auto nextIt = std::next(it);
-            if (nextIt == outer_ring.end()) {
-                nextIt = outer_ring.begin();
-            }
-            auto vertexIndex1 = best_plane.to_2d(vertices[*it]);
-            auto vertexIndex2 = best_plane.to_2d(vertices[*nextIt]);
-            cdt.insert_constraint(vertexIndex1, vertexIndex2);
-        }
-
-        for (auto inner: inner_rings) {
-            for (auto it = inner.begin(); it != inner.end(); ++it) {
-                auto nextIt = std::next(it);
-                if (nextIt == inner.end()) {
-                    nextIt = inner.begin();
-                }
-                auto vertexIndex1 = best_plane.to_2d(vertices[*it]);
-                auto vertexIndex2 = best_plane.to_2d(vertices[*nextIt]);
-                cdt.insert_constraint(vertexIndex1, vertexIndex2);
-            }
-        }
+        int counter = 0;
 
         for (int vertexIndex_o : outer_ring) {
             Point_2 vertex1 = best_plane.to_2d(vertices[vertexIndex_o]);
-            Triangulation::Vertex_handle v1 = cdt.insert(vertex1);
-            v1->info() = vertexIndex_o;
-//            outer_segments.push_back(v1);
+            outer_points.push_back(vertex1);
+//            auto vt = std::make_pair(vertex1, counter);
+            Triangulation::Vertex_handle v1 = triangulation.insert(vertex1);
+            v1->info() = counter;
+            counter++;
         }
 
-        for (auto ring:inner_rings) {
+        for (const auto& ring:inner_rings) {
+            std::vector<Point_2> in_pt;
             for (int vertexIndex_i : ring) {
                 Point_2 vert1 = best_plane.to_2d(vertices[vertexIndex_i]);
-                Triangulation::Vertex_handle vi1 = cdt.insert(vert1);
-                vi1->info() = vertexIndex_i;
-//                inner_segments.push_back(vi1);
+                in_pt.push_back(vert1);
+//                points_2d.push_back(std::make_pair(vert1, counter));
+                Triangulation::Vertex_handle v1 = triangulation.insert(vert1);
+                v1->info() = counter;
+                counter++;
+            }
+            inner_points.push_back(in_pt);
+        }
+
+        for (std::size_t i = 0; i < outer_points.size(); ++i) {
+            triangulation.insert_constraint(outer_points[i], outer_points[(i + 1) % outer_points.size()]);
+        }
+
+        // Insert inner polygons as constraints
+        for (const auto& inner_poly : inner_points) {
+            for (std::size_t i = 0; i < inner_poly.size(); ++i) {
+                triangulation.insert_constraint(inner_poly[i], inner_poly[(i + 1) % inner_poly.size()]);
             }
         }
 
-        triangulation = cdt;
+//        for (auto it = outer_ring.begin(); it != outer_ring.end(); ++it) {
+//            auto nextIt = std::next(it);
+//            if (nextIt == outer_ring.end()) {
+//                nextIt = outer_ring.begin();
+//            }
+//            auto vertexIndex1 = best_plane.to_2d(vertices[*it]);
+//            auto vertexIndex2 = best_plane.to_2d(vertices[*nextIt]);
+//            triangulation.insert_constraint(vertexIndex1, vertexIndex2);
+//        }
+//
+//        for (auto inner: inner_rings) {
+//            for (auto it = inner.begin(); it != inner.end(); ++it) {
+//                auto nextIt = std::next(it);
+//                if (nextIt == inner.end()) {
+//                    nextIt = inner.begin();
+//                }
+//                auto vertexIndex1 = best_plane.to_2d(vertices[*it]);
+//                auto vertexIndex2 = best_plane.to_2d(vertices[*nextIt]);
+//                triangulation.insert_constraint(vertexIndex1, vertexIndex2);
+//            }
+//        }
+
+
+        count = counter;
+
+//        triangulation.insert(points_2d.begin(), points_2d.end());
 
     };
 };
@@ -198,12 +217,13 @@ int main(int argc, const char * argv[]) {
         std::cout << "Parsing " << number_of_faces << " faces..." << std::endl;
 
         for (int i = 0; i < number_of_faces; ++i) {
-            faces[i].id = i;
             getline(input_stream, line);
             std::istringstream face_stream(line);
             int outer_num, inner_num;
             face_stream >> outer_num >> inner_num;
             std::cout << "Face " << i << " has inner ring number:" << inner_num << std::endl;
+            std::list<int> outer_ring;
+            std::list<std::list<int>> inner_rings;
 
             // read outer ring
             getline(input_stream, line);
@@ -213,7 +233,7 @@ int main(int argc, const char * argv[]) {
             std::cout << "Outer ring " << " has " << o_vertices << " vertices:" << std::endl;
             while (outer_stream >> o_vertices) {
                 std::cout << o_vertices << " ";
-                faces[i].outer_ring.push_back(o_vertices);
+                outer_ring.push_back(o_vertices);
             }
             std::cout << std::endl;
 
@@ -232,10 +252,15 @@ int main(int argc, const char * argv[]) {
                     std::cout << i_vertices << " ";
                     inner_ring.push_back(i_vertices);
                 }
-                faces[i].inner_rings.push_back(inner_ring);
+                inner_rings.push_back(inner_ring);
                 std::cout << std::endl;
             }
 
+            Face face(i, outer_ring, inner_rings);
+            face.fitting_plane(vertices);
+            face.cdt(vertices);
+            mark_domains(face.triangulation);
+            faces.insert(std::make_pair(i, face));
         }
 
     }
@@ -244,36 +269,36 @@ int main(int argc, const char * argv[]) {
     output_stream.open(output_file);
 
 
-    std::map<int, Point> points;
-
-    for (auto face: faces) {
-        face.second.fitting_plane(vertices);
-        face.second.cdt(vertices);
-        mark_domains(face.second.triangulation);
+    int record = 1;
+    for (auto &face: faces) {
+        int count = 0;
+        std::vector<Kernel::Point_2> point_vector;
         for (auto v = face.second.triangulation.finite_vertices_begin(); v != face.second.triangulation.finite_vertices_end(); ++v) {
             Point v_3d= face.second.best_plane.to_3d(v->point());
-            points[v->info()] = v_3d;
+            point_vector.push_back(v->point());
+            output_stream << "v " << v_3d.x()<< " " <<
+                          v_3d.y() << " " << v_3d.z() << std::endl;
+            count++;
         }
-        for (auto t = face.second.triangulation.finite_faces_begin();
-             t != face.second.triangulation.finite_faces_end(); ++t) {
+
+        for (auto t = face.second.triangulation.all_faces_begin();
+             t != face.second.triangulation.all_faces_end(); ++t) {
             if (t->info().in_domain()) {
-                output_stream << "f " << t->vertex(0)->info() << " " <<
-                              t->vertex(1)->info() << " " << t->vertex(2)->info() << std::endl;
+                output_stream <<"f ";
+                for (int i = 0; i < 3; ++i) {
+                int index;
+                Point_2 p = t->vertex(i)->point();
+                auto it = std::find(point_vector.begin(), point_vector.end(), p);
+                index = int(std::distance(point_vector.begin(), it));
+                output_stream <<index  + record << " ";}
+                output_stream << "\n";
             }
         }
-    }
-
-    for (int i = 0; i < points.size(); i++) {
-        output_stream << "v " << points[i].x()<< " " <<
-                      points[i].y() << " " << points[i].z() << std::endl;
+    record = record + count;
     }
 
     output_stream << std::endl;
-
-//    for (auto face: faces) {
-//
-//
-//    }
+    output_stream.close();
 
 
   return 0;
